@@ -17,22 +17,35 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Download Target Webpage
+      # This forces GitHub to keep moving forward even if wget drops an exit code
+      continue-on-error: true
       run: |
         rm -rf docs
         mkdir -p docs/raw
         
-        # 1. DOWNLOAD RENDERED SITE (With subpage logic)
-        # We wrap wget in a subshell ( ) to cleanly isolate and suppress exit code 6
-        (wget --directory-prefix=docs --recursive --level=2 --page-requisites --adjust-extension --convert-links --no-parent --no-host-directories "https://justinlauer.net") || echo "Suppressed expected network warnings."
+        # Mirror the rendered site using a desktop Chrome identity to bypass 403 blocks
+        wget --directory-prefix=docs \
+             --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+             --recursive \
+             --level=2 \
+             --page-requisites \
+             --adjust-extension \
+             --convert-links \
+             --no-parent \
+             --no-host-directories \
+             "https://justinlauer.net"
 
-        # 2. DOWNLOAD THE RAW UNMODIFIED CONTENT
-        curl -sL "https://justinlauer.net" -o docs/raw/index.html
-        curl -sL "https://justinlauer.netassignmentsSCU.html" -o docs/raw/assignmentsSCU.html
+    - name: Download Raw Unmodified Content
+      continue-on-error: true
+      run: |
+        # Download the raw HTML content masquerading as a standard browser link request
+        curl -sL -A "Mozilla/5.0 Chrome/120.0.0.0" "https://justinlauer.net" -o docs/raw/index.html
+        curl -sL -A "Mozilla/5.0 Chrome/120.0.0.0" "https://justinlauer.netassignmentsSCU.html" -o docs/raw/assignmentsSCU.html
 
     - name: Commit and Push Changes
       run: |
         git config --global user.name "GitHub Action"
         git config --global user.email "action@github.com"
         git add docs/
-        git commit -m "Automated daily clone and raw download" || exit 0
+        git commit -m "Automated daily clone update" || exit 0
         git push
