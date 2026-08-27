@@ -2,8 +2,8 @@ name: Daily Webpage Clone
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Runs every day at midnight UTC
-  workflow_dispatch: # Allows you to run it manually
+    - cron: '0 2 * * *' # Runs daily at 02:00 UTC (10:00 PM EDT)
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
   clone-and-deploy:
@@ -16,34 +16,139 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Clear and Setup Directories
+    - name: Setup Directories
       run: |
-        rm -rf docs
         mkdir -p docs/raw
 
-    - name: Download Rendered Site Assets
+    - name: Download Rendered Site Assets (wget)
       run: |
         wget --directory-prefix=docs \
              --user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+             --header="Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" \
+             -e robots=off \
              --recursive \
-             --level=2 \
+             --level=3 \
              --page-requisites \
              --adjust-extension \
              --convert-links \
+             --span-hosts \
+             --domains=justinlauer.net,www.justinlauer.net \
              --no-parent \
              --no-host-directories \
              "https://justinlauer.net" || true
 
-    - name: Download Raw Home Page Content
-      run: curl -sL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "https://justinlauer.net" -o docs/raw/index.html || true
+    - name: Download Raw Pages
+      run: |
+        curl -sL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "https://justinlauer.net" -o docs/raw/index.html || true
+        curl -sL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "https://justinlauer.net/assignmentsSCU.html" -o docs/raw/assignmentsSCU.html || true
+        curl -sL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "https://justinlauer.net/assignmentsSAB.html" -o docs/raw/assignmentsSAB.html || true
+        curl -sL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "https://justinlauer.net/application.html" -o docs/raw/application.html || true
 
-    - name: Download Raw Subpage Content
-      run: curl -sL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "https://justinlauer.netassignmentsSCU.html" -o docs/raw/assignmentsSCU.html || true
+    - name: Cache Missing Linked Pages and Rewrite Navbar Links to Relative Paths
+      run: |
+        python3 - << 'EOF'
+        import os
+        import re
+        import urllib.request
+        import urllib.parse
+
+        BASE_URL = "https://justinlauer.net"
+        DOCS_DIR = "docs"
+        HEADERS = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+
+        # 1. Scan downloaded HTML files for all linked pages
+        discovered_pages = set()
+        url_pattern = re.compile(r'(?:href|src)=["\']([^"\'#\s>]+)["\']', re.IGNORECASE)
+
+        for root, _, files in os.walk(DOCS_DIR):
+            if "raw" in root.split(os.sep):
+                continue
+            for f in files:
+                if f.endswith(('.html', '.htm')):
+                    filepath = os.path.join(root, f)
+                    try:
+                        with open(filepath, 'r', encoding='utf-8', errors='ignore') as html_file:
+                            content = html_file.read()
+                        for match in url_pattern.findall(content):
+                            if 'justinlauer.net' in match or not match.startswith(('http://', 'https://', 'mailto:', 'tel:', 'javascript:', '#')):
+                                parsed = urllib.parse.urlparse(match)
+                                path = parsed.path.lstrip('/')
+                                if path and not path.endswith(('.png', '.jpg', '.jpeg', '.gif', '.css', '.js', '.svg', '.ico')):
+                                    if not path.endswith(('.html', '.htm')) and '.' not in path:
+                                        path += '.html'
+                                    discovered_pages.add(path)
+                    except Exception as e:
+                        print(f"Error scanning {filepath}: {e}")
+
+        # 2. Fetch and cache any missing subpages
+        for page in discovered_pages:
+            target_path = os.path.join(DOCS_DIR, page)
+            if not os.path.exists(target_path):
+                fetch_url = f"{BASE_URL}/{page}"
+                print(f"Caching missing subpage: {fetch_url} -> {target_path}")
+                try:
+                    os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                    req = urllib.request.Request(fetch_url, headers=HEADERS)
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        if resp.status == 200:
+                            with open(target_path, 'wb') as out_f:
+                                out_f.write(resp.read())
+                except Exception as e:
+                    print(f"Could not fetch {fetch_url}: {e}")
+
+        # 3. Rewrite all absolute navbar and page links to local relative paths
+        for root, _, files in os.walk(DOCS_DIR):
+            if "raw" in root.split(os.sep):
+                continue
+            for f in files:
+                if f.endswith(('.html', '.htm')):
+                    filepath = os.path.join(root, f)
+                    rel_dir = os.path.relpath(DOCS_DIR, root)
+                    prefix = '.' if rel_dir == '.' else rel_dir.replace(os.sep, '/')
+
+                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as html_file:
+                        content = html_file.read()
+
+                    def replace_abs_url(match):
+                        attr = match.group(1)
+                        url = match.group(2) or ''
+                        parsed = urllib.parse.urlparse(url)
+                        path = parsed.path.lstrip('/')
+                        if not path or path == '/':
+                            path = 'index.html'
+                        return f'{attr}="{prefix}/{path}"'
+
+                    # Rewrite full justinlauer.net URLs
+                    content = re.sub(
+                        r'(href|src)=["\']https?://(?:www\.)?justinlauer\.net(?:/([^"\'#?]*))?["\']',
+                        replace_abs_url,
+                        content,
+                        flags=re.IGNORECASE
+                    )
+
+                    # Rewrite root-relative links like /assignmentsSCU.html
+                    def replace_root_url(match):
+                        attr = match.group(1)
+                        path = match.group(2).lstrip('/')
+                        if not path:
+                            path = 'index.html'
+                        return f'{attr}="{prefix}/{path}"'
+
+                    content = re.sub(r'(href|src)=["\']/([^"\'#?]+)["\']', replace_root_url, content)
+                    content = re.sub(r'(href|src)=["\']\./+', r'\1="./', content)
+
+                    with open(filepath, 'w', encoding='utf-8') as html_file:
+                        html_file.write(content)
+
+        print("Navbar link caching and rewriting completed successfully.")
+        EOF
 
     - name: Commit and Push Changes
       run: |
         git config --global user.name "GitHub Action"
         git config --global user.email "action@github.com"
         git add docs/
-        git commit -m "Automated daily clone update" || exit 0
+        git commit -m "Automated daily clone update with cached navbar links" || exit 0
         git push
