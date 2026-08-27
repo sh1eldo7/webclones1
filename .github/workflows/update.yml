@@ -9,7 +9,6 @@ jobs:
   clone-and-deploy:
     runs-on: ubuntu-latest
     
-    # This block explicitly opens write access for this job
     permissions:
       contents: write
 
@@ -19,18 +18,17 @@ jobs:
 
     - name: Download Target Webpage
       run: |
+        # Clear out old deployments safely
         rm -rf docs
         mkdir docs
         
-        # Install httrack to handle full site copying without crashing
-        sudo apt-get update && sudo apt-get install -y httrack
+        # Pull down the index and subpages directly without internal conversion crashes
+        wget --directory-prefix=docs --page-requisites --adjust-extension --no-parent --no-host-directories --level=1 "https://justinlauer.net" || true
         
-        # Mirror the full site assets directly into the docs folder root
-        # Using -N0 tells HTTrack to drop all files cleanly without subfolders
-        httrack "https://justinlauer.net" -O docs -W -N0 +*.html +*.css +*.js +*.png +*.jpg +*.gif
-        
-        # Clean up httrack system log files so they aren't pushed to your site
-        rm -rf docs/hts-cache docs/hts-log.txt docs/backblue.gif
+        # Ensure index.html exists in case it was saved under a variant query path
+        if [ ! -f "docs/index.html" ] && [ -f "docs/index" ]; then
+          mv docs/index docs/index.html
+        fi
 
     - name: Commit and Push Changes
       run: |
