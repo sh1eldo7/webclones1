@@ -18,22 +18,12 @@ jobs:
 
     - name: Download Target Webpage
       run: |
-        # Clear out old deployments safely
         rm -rf docs
         mkdir -p docs/raw
         
-        # 1. DOWNLOAD THE RENDERED SITE (with local converted links)
-        # We append "|| true" directly to the wget execution statement line
-        # This isolates auth/404 code anomalies from terminating the pipeline
-        wget --directory-prefix=docs \
-             --recursive \
-             --level=2 \
-             --page-requisites \
-             --adjust-extension \
-             --convert-links \
-             --no-parent \
-             --no-host-directories \
-             "https://justinlauer.net" || true
+        # 1. DOWNLOAD RENDERED SITE (With subpage logic)
+        # We wrap wget in a subshell ( ) to cleanly isolate and suppress exit code 6
+        (wget --directory-prefix=docs --recursive --level=2 --page-requisites --adjust-extension --convert-links --no-parent --no-host-directories "https://justinlauer.net") || echo "Suppressed expected network warnings."
 
         # 2. DOWNLOAD THE RAW UNMODIFIED CONTENT
         curl -sL "https://justinlauer.net" -o docs/raw/index.html
