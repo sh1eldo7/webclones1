@@ -18,13 +18,11 @@ jobs:
 
     - name: Download Target Webpage
       run: |
+        # Reset tracking folders
         rm -rf docs
-        mkdir docs
+        mkdir -p docs/raw
         
-        # Mirror the target site safely into your docs folder
-        # -r activates recursion to find subpages
-        # -l 2 allows it to go deep enough to gather the subpage HTML layout files
-        # -k rewrites links locally so subpage navigation works seamlessly
+        # 1. DOWNLOAD THE RENDERED SITE (with local converted links)
         wget --directory-prefix=docs \
              --recursive \
              --level=2 \
@@ -35,10 +33,17 @@ jobs:
              --no-host-directories \
              "https://justinlauer.net" || true
 
+        # 2. DOWNLOAD THE RAW UNMODIFIED CONTENT
+        # Grabs the raw homepage source code exactly as the server sends it
+        curl -sL "https://justinlauer.net" -o docs/raw/index.html
+        
+        # Grabs the raw subpage source code exactly as the server sends it
+        curl -sL "https://justinlauer.netassignmentsSCU.html" -o docs/raw/assignmentsSCU.html
+
     - name: Commit and Push Changes
       run: |
         git config --global user.name "GitHub Action"
         git config --global user.email "action@github.com"
         git add docs/
-        git commit -m "Automated daily clone update" || exit 0
+        git commit -m "Automated daily clone and raw download" || exit 0
         git push
