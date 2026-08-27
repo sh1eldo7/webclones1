@@ -18,11 +18,13 @@ jobs:
 
     - name: Download Target Webpage
       run: |
-        # Reset tracking folders
+        # Clear out old deployments safely
         rm -rf docs
         mkdir -p docs/raw
         
         # 1. DOWNLOAD THE RENDERED SITE (with local converted links)
+        # We append "|| true" directly to the wget execution statement line
+        # This isolates auth/404 code anomalies from terminating the pipeline
         wget --directory-prefix=docs \
              --recursive \
              --level=2 \
@@ -34,10 +36,7 @@ jobs:
              "https://justinlauer.net" || true
 
         # 2. DOWNLOAD THE RAW UNMODIFIED CONTENT
-        # Grabs the raw homepage source code exactly as the server sends it
         curl -sL "https://justinlauer.net" -o docs/raw/index.html
-        
-        # Grabs the raw subpage source code exactly as the server sends it
         curl -sL "https://justinlauer.netassignmentsSCU.html" -o docs/raw/assignmentsSCU.html
 
     - name: Commit and Push Changes
