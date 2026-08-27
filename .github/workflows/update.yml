@@ -18,17 +18,22 @@ jobs:
 
     - name: Download Target Webpage
       run: |
-        # Clear out old deployments safely
         rm -rf docs
         mkdir docs
         
-        # Pull down the index and subpages directly without internal conversion crashes
-        wget --directory-prefix=docs --page-requisites --adjust-extension --no-parent --no-host-directories --level=1 "https://justinlauer.net" || true
-        
-        # Ensure index.html exists in case it was saved under a variant query path
-        if [ ! -f "docs/index.html" ] && [ -f "docs/index" ]; then
-          mv docs/index docs/index.html
-        fi
+        # Mirror the target site safely into your docs folder
+        # -r activates recursion to find subpages
+        # -l 2 allows it to go deep enough to gather the subpage HTML layout files
+        # -k rewrites links locally so subpage navigation works seamlessly
+        wget --directory-prefix=docs \
+             --recursive \
+             --level=2 \
+             --page-requisites \
+             --adjust-extension \
+             --convert-links \
+             --no-parent \
+             --no-host-directories \
+             "https://justinlauer.net" || true
 
     - name: Commit and Push Changes
       run: |
