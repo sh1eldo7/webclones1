@@ -17,8 +17,9 @@ jobs:
         rm -rf docs
         mkdir docs
         cd docs
-        wget --mirror --page-requisites --adjust-extension --convert-links --no-parent --no-host-directories "https://justinlauer.net/"
-        
+        # Use curl to safely save the page content without crashing
+        curl -sL "https://justinlauer.net/" -o index.html
+
     - name: Commit and Push Changes
       run: |
         git config --global user.name "GitHub Action"
