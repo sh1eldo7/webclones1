@@ -1,0 +1,28 @@
+name: Daily Webpage Clone
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Runs every day at midnight UTC
+  workflow_dispatch: # Allows you to run it manually
+
+jobs:
+  clone-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Download Target Webpage
+      run: |
+        rm -rf docs
+        mkdir docs
+        cd docs
+        wget --mirror --page-requisites --adjust-extension --convert-links --no-parent --no-host-directories "https://justinlauer.net/"
+        
+    - name: Commit and Push Changes
+      run: |
+        git config --global user.name "GitHub Action"
+        git config --global user.email "action@github.com"
+        git add docs/
+        git commit -m "Automated daily clone update" || exit 0
+        git push
