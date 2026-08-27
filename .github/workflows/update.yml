@@ -8,6 +8,11 @@ on:
 jobs:
   clone-and-deploy:
     runs-on: ubuntu-latest
+    
+    # This block explicitly opens write access for this job
+    permissions:
+      contents: write
+
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
